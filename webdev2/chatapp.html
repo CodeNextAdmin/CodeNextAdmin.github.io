@@ -1,0 +1,207 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="">
+  <title>Chat App</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.2.3/dist/css/bootstrap.min.css" rel="stylesheet">
+  <!-- PARSE stuff-->
+  <script type="text/javascript" src="https://npmcdn.com/parse/dist/parse.min.js"></script>
+
+  <script type="text/javascript" type="text/javascript">
+    Parse.initialize("9j3JlwaGcuBfve06oFT8p1N8nckAHOJwU9CVpjA4", "BOJUBKqamLFXnkkzGmzzsMUpmM4ws8sGAzcBortj");
+    Parse.serverURL = 'https://parseapi.back4app.com/'
+  </script>
+  <style>
+    @media (min-width: 768px) {
+      /* some rules */
+    }
+  </style>
+
+  <!-- Custom styles for this template -->
+  <link href="styles/chatapp.css" rel="stylesheet">
+</head>
+
+<body>
+  <div class="container">
+    <div class="col-lg-8 mx-auto py-md-5 text-center">
+
+      <h2 class="headline">Chatzapp</h2>
+      <p class="lead">Chat with your friends</p>
+      <p id="current-user-text"></p>
+      <div class="input-group mb-3">
+        <input id="msg-input" type="text" class="form-control" placeholder="Enter a message">
+        <button class="btn btn-secondary" type="button" id="send-msg-btn" onclick="addMessage()">Send</button>
+      </div>
+
+    </div>
+    <div class="container col-lg-8 mx-auto" id="all-messages-box">
+      <!-- The messages output here -->
+    </div>
+  </div>
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.2.3/dist/js/bootstrap.bundle.min.js"
+    integrity="sha384-kenU1KFdBIe4zVF0s0G1M5b4hcpxyD9F7jL+jjXkk+Q2h455rYXK/7HAuoJl+0I4"
+    crossorigin="anonymous"></script>
+
+  <script>
+    /* makes all the magic happen */
+
+    let currentUser = prompt("Please enter your name to chat:"); //prompt user, no authentication
+    if (currentUser == null || currentUser == "") {
+      text = "User cancelled the prompt.";
+      currentUser = "Anonymous" //entering nothing makes one anonymous
+    } else {
+      let welcome = `Hello ${currentUser}!`; 
+
+      document.querySelector('#current-user-text').innerHTML = welcome //add welcome msg
+
+    }
+
+    let messages = []
+    getAllMessages() //run this on page load to display all existing messages upon load
+
+    function addMessage() {
+
+      let msgInput = document.querySelector("#msg-input") //use to get the text input
+      let newMessage = `${msgInput.value}`  //used to get its actual value
+      msgInput.value = ""  //clear it out every time 
+
+      storeMsg(newMessage) //storeMsg is a separate function that talks to the database
+
+    }
+
+    async function storeMsg(msg) {
+    /*
+      Parse calls are asynchronious functions, they take time to complete so we have to wait for
+      the results to come before we can confirm, move on, or use any data that is returned.
+      try/catch is used to handle the async call.
+    */
+
+    //If the object table doesn't exist, Parse creates it and its properties
+      const msgToStore = new Parse.Object('Message') 
+      msgToStore.set('username', currentUser);
+      msgToStore.set('msgText', msg)
+
+      try {
+        const result = await msgToStore.save() // this saves to Parse db
+        console.log("Successfully added " + result.id )
+
+      } catch (error) {
+        console.log("ERROR: " + error)
+      }
+    }
+
+    async function getAllMessages() {
+     //This async function queries the database and populates an array with results
+
+      let allMessages = document.querySelector("#all-messages-box")
+      allMessages.innerHTML = "" //clear it in case it has stuff
+      messages = [] //empty the array before reloading it
+
+      try {
+         // this is an unfiltered query. You get all the messages, but can also filter by matches
+        const query = new Parse.Query("Message") 
+        const results = await query.find()
+
+        //loop through results
+        for (const msg of results) {
+          const msgText = msg.get('msgText')
+          const msgDate = msg.get('createdAt').toLocaleString()
+          const msgUser = msg.get('username')
+          let fullMsg = `${msgUser} : ${msgText} at ${msgDate}`
+
+          appendMessage(msgUser, msgText, msgDate)
+
+        }
+
+      } catch (error) {
+        console.log(error)
+      }
+    }
+
+    function appendMessage(user, message, date) {
+
+      let newMessage = `<p class"user-chat">
+                                <span class="username"> ${user}: </span>
+                                <span class="message-text"> ${message}</span>
+                                <span class="message-date"> at ${date.toLocaleString()}</span>
+                                </p>`
+
+      let allMessages = document.querySelector("#all-messages-box")
+      allMessages.insertAdjacentHTML("beforeend", newMessage)
+
+    }
+
+    function displayMessages() {
+        /* not used in last version, but could be used to display if items in an array */
+      let allMessages = document.querySelector("#all-messages-box")
+      allMessages.innerHTML = ""
+
+      if (messages.length > 0) {
+
+        for (message of messages) {
+         
+          allMessages.insertAdjacentHTML("beforeend", message)
+
+        }
+      }
+    }
+
+    /*
+    
+    Live Query automatically adds a new msg anytime anyone adds one, making the chat live
+    We need to pass in our authentication to use and also set up our server to handle
+    read more about this here: https://www.back4app.com/docs/platform/parse-server-live-query-example
+    */
+    var client = new Parse.LiveQueryClient({
+      applicationId: '9j3JlwaGcuBfve06oFT8p1N8nckAHOJwU9CVpjA4',
+      serverURL: 'wss://' + 'chatzapp.b4a.io', // Websocket, this URL can be found in back4app settings
+      javascriptKey: 'BOJUBKqamLFXnkkzGmzzsMUpmM4ws8sGAzcBortj'
+    });
+
+    client.open()
+
+    const query = new Parse.Query('Message');
+    query.ascending('createdAt').limit(5);
+    var subscription = client.subscribe(query);
+
+    subscription.on('create', msg => {
+    console.log("new change detected for object id: " + msg.id)
+
+    //run a query and search by matching id. 
+    getNewMessage(msg.id)
+
+   });
+
+   async function getNewMessage(id){
+    console.log("searching for " + id)
+
+    try {
+
+      const query = new Parse.Query('Message')
+      query.equalTo("objectId", id);
+
+      const newMsgObj = await query.find()
+
+      console.log(newMsgObj[0].attributes.msgText)
+
+      let msgText = newMsgObj[0].attributes.msgText
+      let msgSender = newMsgObj[0].attributes.username
+      let msgDate = newMsgObj[0].attributes.createdAt
+      appendMessage(msgSender,msgText,msgDate) 
+ 
+    } catch (error) {
+      console.log("ERROR: " + error)
+    }
+
+   }
+
+   
+
+  </script>
+
+</body>
+
+</html>
